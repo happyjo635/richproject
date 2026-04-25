@@ -917,7 +917,7 @@ canvas { display: block; }
         <button class="modal-close-btn" style="background:var(--blue-bg);color:var(--blue);margin:0;" onclick="downloadBackup()">백업 다운로드</button>
         <button class="modal-close-btn" style="background:var(--green-bg);color:var(--green);margin:0;" id="upload-backup-btn" onclick="document.getElementById('backup-file-input').click()">백업 복원</button>
         <button class="modal-close-btn" style="background:#ffd60a;color:#333;margin:0;" onclick="requestFileAccess()">💾 저장 폴더 설정</button>
-        <button class="modal-close-btn" style="background:#4285F4;color:white;margin:0;" onclick="connectGoogleDrive()">☁️ Google Drive 연결</button>
+        <button class="modal-close-btn" style="background:#0061FF;color:white;margin:0;" onclick="connectDropbox()">☁️ Dropbox 연결</button>
         <input type="file" id="backup-file-input" accept=".json" style="display:none;" onchange="handleBackupUpload(event)">
       </div>
       <button class="modal-close-btn" onclick="closeSettingsModal()">닫기</button>
@@ -1070,11 +1070,10 @@ async function save() {
 }
 
 let fileHandle = null;
-let googleDriveFileId = null;
-let googleAuthToken = null;
+let dropboxAccessToken = null;
 
-// Google API 설정 - 본인의 클라이언트 ID를 입력하세요
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE';
+// Dropbox 설정 - 본인의 앱 키를 입력하세요
+const DROPBOX_APP_KEY = 'YOUR_DROPBOX_APP_KEY_HERE';
 
 async function saveToJsonFile() {
   try {
@@ -1089,13 +1088,12 @@ async function saveToJsonFile() {
         console.log('✓ 파일에 저장됨:', fileHandle.name);
       } catch(e) {
         console.error('파일 시스템 저장 실패:', e);
-        toast('파일 저장 오류: ' + e.message);
       }
     }
 
-    // Google Drive에 저장
-    if (googleAuthToken) {
-      await saveToGoogleDrive(jsonData);
+    // Dropbox에 저장
+    if (dropboxAccessToken) {
+      await saveToDropbox(jsonData);
     }
 
     // IndexedDB에도 저장
@@ -1158,88 +1156,63 @@ async function requestFileAccess() {
   }
 }
 
-async function connectGoogleDrive() {
-  const clientId = prompt('Google Cloud 클라이언트 ID를 입력하세요.\n(https://console.cloud.google.com 에서 생성)\n\nOAuth 2.0 클라이언트 ID 예: xxxxx.apps.googleusercontent.com');
-  if (!clientId) return;
+async function connectDropbox() {
+  const appKey = prompt('Dropbox 앱 키를 입력하세요.\n(https://www.dropbox.com/developers/apps 에서 생성)\n\n앱 키 예: abc123def456');
+  if (!appKey) return;
 
   try {
-    await loadGoogleAPI(clientId);
-    toast('Google Drive 인증 중...');
+    const redirectUri = window.location.origin + window.location.pathname;
+    const authUrl = `https://www.dropbox.com/oauth2/authorize?response_type=code&client_id=${appKey}&redirect_uri=${encodeURIComponent(redirectUri)}&token_access_type=offline`;
+
+    toast('Dropbox 인증 페이지로 이동합니다...');
+    window.open(authUrl, '_blank', 'width=500,height=600');
   } catch(e) {
     toast('오류: ' + e.message);
   }
 }
 
-function loadGoogleAPI(clientId) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/api.js';
-    script.onload = () => {
-      gapi.load('client:auth2', async () => {
-        try {
-          await gapi.client.init({
-            clientId: clientId,
-            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-            scope: 'https://www.googleapis.com/auth/drive.file'
-          });
+// Dropbox 토큰 처리 (URL에서)
+function checkDropboxAuth() {
+  const params = new URLSearchParams(window.location.hash.substring(1));
+  const accessToken = params.get('access_token');
 
-          const authInstance = gapi.auth2.getAuthInstance();
-          if (!authInstance.isSignedIn.get()) {
-            await authInstance.signIn();
-          }
-
-          googleAuthToken = gapi.auth.getToken();
-          toast('✅ Google Drive 연결 완료!');
-          resolve();
-        } catch(e) {
-          reject(e);
-        }
-      });
-    };
-    script.onerror = () => reject(new Error('Google API 로드 실패'));
-    document.head.appendChild(script);
-  });
+  if (accessToken) {
+    dropboxAccessToken = accessToken;
+    localStorage.setItem('dropboxToken', accessToken);
+    toast('✅ Dropbox 연결 완료!');
+    console.log('Dropbox 토큰 저장됨');
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } else if (localStorage.getItem('dropboxToken')) {
+    dropboxAccessToken = localStorage.getItem('dropboxToken');
+  }
 }
 
-async function saveToGoogleDrive(jsonData) {
-  if (!googleAuthToken) return;
+async function saveToDropbox(jsonData) {
+  if (!dropboxAccessToken) return;
 
   try {
-    const metadata = {
-      name: 'app-data.json',
-      mimeType: 'application/json'
-    };
-
-    const form = new FormData();
-    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-    form.append('file', new Blob([jsonData], { type: 'application/json' }));
-
-    let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-    let method = 'POST';
-
-    // 기존 파일이 있으면 업데이트
-    if (googleDriveFileId) {
-      url = `https://www.googleapis.com/upload/drive/v3/files/${googleDriveFileId}?uploadType=multipart`;
-      method = 'PATCH';
-    }
-
-    const response = await fetch(url, {
-      method: method,
-      headers: { 'Authorization': 'Bearer ' + googleAuthToken.access_token },
-      body: form
+    const response = await fetch('https://content.dropboxapi.com/2/files/upload', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${dropboxAccessToken}`,
+        'Dropbox-API-Arg': JSON.stringify({
+          path: '/app-data.json',
+          mode: 'overwrite',
+          autorename: false
+        }),
+        'Content-Type': 'application/octet-stream'
+      },
+      body: jsonData
     });
 
     if (response.ok) {
-      const result = await response.json();
-      if (!googleDriveFileId) {
-        googleDriveFileId = result.id;
-      }
-      console.log('✓ Google Drive에 저장됨:', result.name);
+      console.log('✓ Dropbox에 저장됨: app-data.json');
     } else {
-      throw new Error('Google Drive 저장 실패: ' + response.statusText);
+      const error = await response.json();
+      throw new Error('Dropbox 저장 실패: ' + error.error_summary);
     }
   } catch(e) {
-    console.error('Google Drive 저장 오류:', e);
+    console.error('Dropbox 저장 오류:', e);
   }
 }
 
@@ -2232,6 +2205,8 @@ setInterval(autoUpdateStockPrices, 300000);
 <script>
 /* ── INIT APP ── */
 (async () => {
+  checkDropboxAuth();
+
   const backupData = await loadFromIndexedDB();
   if (backupData) {
     S = backupData;
