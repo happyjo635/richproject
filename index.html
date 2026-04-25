@@ -2060,7 +2060,7 @@ if (location.protocol !== 'file:') {
       document.getElementById('user-screen').style.display = 'none';
       document.getElementById('main-app').style.display = 'flex';
       if (logoutBtn) logoutBtn.style.display = 'block';
-      renderTabs();
+      renderTab(activeTab);
     } else {
       document.getElementById('user-screen').style.display = 'flex';
       document.getElementById('main-app').style.display = 'none';
