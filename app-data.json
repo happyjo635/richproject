@@ -1,0 +1,153 @@
+{
+  "users": [
+    {
+      "id": "u1",
+      "name": "용가리",
+      "color": "#6C63FF",
+      "bg": "rgba(108,99,255,0.2)",
+      "icon": "🐕"
+    },
+    {
+      "id": "u2",
+      "name": "지오니",
+      "color": "#2DD4A0",
+      "bg": "rgba(45,212,160,0.2)",
+      "icon": "🐰"
+    }
+  ],
+  "ledger": [
+    {
+      "id": "_pr32c5z",
+      "userId": "u1",
+      "date": "2026-04-25",
+      "type": "expense",
+      "category": "식비",
+      "amount": 1111,
+      "memo": "111",
+      "recurring": false
+    },
+    {
+      "id": "_il3ruc5",
+      "userId": "u1",
+      "date": "2026-04-25",
+      "type": "income",
+      "category": "급여",
+      "amount": 250000,
+      "memo": "1234",
+      "recurring": true
+    },
+    {
+      "id": "_zzsureh",
+      "userId": "u1",
+      "date": "2026-04-25",
+      "type": "expense",
+      "category": "의료",
+      "amount": 12345,
+      "memo": "12345",
+      "recurring": false
+    },
+    {
+      "id": "_2rtyyvp",
+      "userId": "u1",
+      "date": "2026-04-25",
+      "type": "income",
+      "category": "투자수익",
+      "amount": 100000,
+      "memo": "투자수익",
+      "recurring": false
+    }
+  ],
+  "assets": [
+    {
+      "id": "_l0w3atw",
+      "name": "ff",
+      "category": "real",
+      "value": 111111,
+      "note": "ff"
+    },
+    {
+      "id": "_p1h8rmj",
+      "name": "test",
+      "category": "cash",
+      "value": 11112222,
+      "note": "adff"
+    },
+    {
+      "id": "_vqrhulg",
+      "name": "ffff",
+      "category": "debt",
+      "value": 1356,
+      "note": "222"
+    },
+    {
+      "id": "_n7y7qx4",
+      "name": "안녕",
+      "category": "real",
+      "value": 1234567,
+      "note": "123456"
+    }
+  ],
+  "trades": [
+    {
+      "id": "_3wc5w4b",
+      "userId": "u1",
+      "date": "2026-04-25",
+      "type": "buy",
+      "category": "국내주식",
+      "currency": "KRW",
+      "ticker": "TT",
+      "name": "tt",
+      "qty": 1,
+      "price": 10000,
+      "currentPrice": 20000
+    },
+    {
+      "id": "_6ct3w2m",
+      "userId": "u1",
+      "date": "2026-04-25",
+      "type": "sell",
+      "category": "해외주식",
+      "currency": "USD",
+      "ticker": "AAAA",
+      "name": "aaaa",
+      "qty": 12,
+      "price": 100,
+      "currentPrice": null
+    },
+    {
+      "id": "_y1hn0gg",
+      "userId": "u1",
+      "date": "2026-04-25",
+      "type": "buy",
+      "category": "암호화폐",
+      "currency": "KRW",
+      "ticker": "BBBB",
+      "name": "bbbb",
+      "qty": 111,
+      "price": 222,
+      "currentPrice": 3333
+    }
+  ],
+  "targets": {
+    "국내주식": 30,
+    "해외주식": 30,
+    "ETF": 25,
+    "암호화폐": 10,
+    "채권/예금": 5,
+    "byUser": {
+      "u1": {
+        "TT": 26,
+        "BBBB": 20
+      }
+    }
+  },
+  "budgets": {
+    "식비": 1111,
+    "교통": 2222,
+    "주거": 3333,
+    "의료": 4444,
+    "여가": 5555,
+    "기타": 6666
+  },
+  "exchangeRate": 1480
+}

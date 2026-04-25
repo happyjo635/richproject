@@ -916,8 +916,8 @@ canvas { display: block; }
         </div>
         <button class="modal-close-btn" style="background:var(--blue-bg);color:var(--blue);margin:0;" onclick="downloadBackup()">백업 다운로드</button>
         <button class="modal-close-btn" style="background:var(--green-bg);color:var(--green);margin:0;" id="upload-backup-btn" onclick="document.getElementById('backup-file-input').click()">백업 복원</button>
+        <button class="modal-close-btn" style="background:#ffd60a;color:#333;margin:0;" onclick="requestFileAccess()">💾 저장 폴더 설정</button>
         <input type="file" id="backup-file-input" accept=".json" style="display:none;" onchange="handleBackupUpload(event)">
-        <button class="modal-close-btn" style="background:var(--red-bg);color:var(--red);margin:0;" id="logout-btn" onclick="logout()" style="display:none;">로그아웃</button>
       </div>
       <button class="modal-close-btn" onclick="closeSettingsModal()">닫기</button>
     </div>
@@ -1037,14 +1037,116 @@ function loadState() {
   try { const r=localStorage.getItem('moneybook'); if(r) return JSON.parse(r); } catch(e){}
   return JSON.parse(JSON.stringify(DEFAULT_STATE));
 }
+
+async function loadFromIndexedDB() {
+  return new Promise((resolve) => {
+    const request = indexedDB.open('MoneyBook', 1);
+    request.onsuccess = (e) => {
+      const db = e.target.result;
+      const tx = db.transaction('backups', 'readonly');
+      const getRequest = tx.objectStore('backups').get('latest');
+      getRequest.onsuccess = () => {
+        if (getRequest.result && getRequest.result.data) {
+          try {
+            resolve(JSON.parse(getRequest.result.data));
+          } catch(e) {
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      };
+      getRequest.onerror = () => resolve(null);
+    };
+    request.onerror = () => resolve(null);
+  });
+}
 async function save() {
   try {
     localStorage.setItem('moneybook', JSON.stringify(S));
-    // HTTP 프로토콜일 때만 Firebase에 저장
-    if (fbUser && location.protocol !== 'file:') {
-      await fbDb.ref(`moneybook/${fbUser.uid}`).set(S);
-    }
+    saveToJsonFile();
   } catch(e){ console.log('저장 오류:', e); }
+}
+
+let fileHandle = null;
+
+async function saveToJsonFile() {
+  try {
+    const jsonData = JSON.stringify(S, null, 2);
+
+    // 파일 시스템에 저장
+    if (fileHandle) {
+      try {
+        const writable = await fileHandle.createWritable();
+        await writable.write(jsonData);
+        await writable.close();
+        console.log('✓ 파일에 저장됨:', fileHandle.name);
+      } catch(e) {
+        console.error('파일 시스템 저장 실패:', e);
+        toast('파일 저장 오류: ' + e.message);
+      }
+    } else {
+      console.log('파일 핸들이 없음 - 설정 > 저장 폴더 설정을 눌러주세요');
+    }
+
+    // IndexedDB에도 저장
+    saveToIndexedDB(jsonData);
+  } catch(e) {
+    console.error('JSON 저장 오류:', e);
+  }
+}
+
+function saveToIndexedDB(jsonData) {
+  try {
+    const request = indexedDB.open('MoneyBook', 1);
+    request.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('backups')) {
+        db.createObjectStore('backups', { keyPath: 'id' });
+      }
+    };
+    request.onsuccess = (e) => {
+      try {
+        const db = e.target.result;
+        if (db.objectStoreNames.contains('backups')) {
+          const tx = db.transaction('backups', 'readwrite');
+          tx.objectStore('backups').put({ id: 'latest', data: jsonData, timestamp: new Date() });
+        }
+      } catch(err) {
+        console.error('IndexedDB 저장 실패:', err);
+      }
+    };
+    request.onerror = (e) => {
+      console.error('IndexedDB 열기 실패:', e.target.error);
+    };
+  } catch(err) {
+    console.error('IndexedDB 오류:', err);
+  }
+}
+
+async function requestFileAccess() {
+  try {
+    if (!window.showSaveFilePicker) {
+      toast('⚠️ 이 기능은 최신 브라우저에서만 지원됩니다 (Chrome, Edge)');
+      return;
+    }
+
+    fileHandle = await window.showSaveFilePicker({
+      suggestedName: 'app-data.json',
+      types: [{ description: 'JSON Files', accept: { 'application/json': ['.json'] } }]
+    });
+
+    console.log('파일 선택됨:', fileHandle.name);
+    toast('✅ 저장 폴더 설정 완료! 이제 자동으로 저장됩니다.');
+
+    // 즉시 저장해보기
+    await saveToJsonFile();
+  } catch(e) {
+    if (e.name !== 'AbortError') {
+      console.error('파일 접근 오류:', e);
+      toast('오류: ' + e.message);
+    }
+  }
 }
 
 function getChartBorderColor() {
@@ -1071,38 +1173,9 @@ function renderUserSelect() {
       <div class="user-avatar" style="background:${u.bg};color:${u.color};font-size:24px;">${u.icon||u.name.slice(0,2)}</div>
       <div class="user-card-name">${u.name}</div>
     </div>
-  `).join('') + (location.protocol !== 'file:' ? `
-    <div style="grid-column:1/-1;display:flex;gap:8px;margin-top:20px;justify-content:center;">
-      <button onclick="loginWithGoogle()" style="flex:1;padding:12px 20px;background:var(--accent);color:white;border-radius:var(--radius);font-weight:600;">
-        구글로 로그인
-      </button>
-    </div>
-  ` : '');
+  `).join('');
 }
 
-async function loginWithGoogle() {
-  try {
-    const provider = new firebase.auth.GoogleAuthProvider();
-    const result = await fbAuth.signInWithPopup(provider);
-    toast('로그인 완료! 데이터 동기화 시작...');
-  } catch(e) {
-    toast('로그인 실패: ' + e.message);
-  }
-}
-
-async function loginAnonymous() {
-  try {
-    await fbAuth.signInAnonymously();
-    toast('오프라인 모드로 시작합니다');
-  } catch(e) {
-    toast('오류: ' + e.message);
-  }
-}
-
-function logout() {
-  fbAuth.signOut();
-  toast('로그아웃됐어요');
-}
 
 function selectUser(id) {
   currentUserId = id;
@@ -1161,11 +1234,51 @@ function downloadBackup() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `moneybook-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.download = `app-data.json`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   toast('백업 파일이 다운로드됐어요');
   closeSettingsModal();
+}
+
+function autoDownloadBackup() {
+  const backupData = JSON.stringify(S, null, 2);
+  const blob = new Blob([backupData], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `app-data.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function uploadBackup() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        if (data.ledger && data.users) {
+          S = data;
+          save();
+          renderTab(activeTab);
+          toast('백업 파일이 복원됐어요');
+          closeSettingsModal();
+        } else {
+          toast('올바른 백업 파일이 아닙니다');
+        }
+      } catch(e) {
+        toast('파일 읽기 실패: ' + e.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
 }
 
 function handleBackupUpload(event) {
@@ -2022,52 +2135,17 @@ renderUserSelect();
 setInterval(autoUpdateStockPrices, 300000);
 </script>
 
-<!-- Firebase SDK (Compat version for plain HTML) -->
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
-
 <script>
-/* ── FIREBASE SETUP ── */
-const firebaseConfig = {
-  apiKey: "AIzaSyDj0CqhASOm_r0AugBoMzOuq3gVVf1SRU4",
-  authDomain: "richproject-a1a72.firebaseapp.com",
-  projectId: "richproject-a1a72",
-  storageBucket: "richproject-a1a72.firebasestorage.app",
-  messagingSenderId: "190154606789",
-  appId: "1:190154606789:web:1782b0a259746caacbc8ac"
-};
-
-let fbDb = null;
-let fbAuth = null;
-let fbUser = null;
-
-if (location.protocol !== 'file:') {
-  firebase.initializeApp(firebaseConfig);
-  fbDb = firebase.database();
-  fbAuth = firebase.auth();
-
-  fbAuth.onAuthStateChanged(user => {
-    fbUser = user;
-    const logoutBtn = document.getElementById('logout-btn');
-    if (user) {
-      fbDb.ref(`moneybook/${user.uid}`).on('value', snapshot => {
-        if (snapshot.exists()) {
-          S = snapshot.val();
-          renderTab(activeTab);
-        }
-      });
-      document.getElementById('user-screen').style.display = 'none';
-      document.getElementById('main-app').style.display = 'flex';
-      if (logoutBtn) logoutBtn.style.display = 'block';
-      renderTab(activeTab);
-    } else {
-      document.getElementById('user-screen').style.display = 'flex';
-      document.getElementById('main-app').style.display = 'none';
-      if (logoutBtn) logoutBtn.style.display = 'none';
-    }
-  });
-}
+/* ── INIT APP ── */
+(async () => {
+  const backupData = await loadFromIndexedDB();
+  if (backupData) {
+    S = backupData;
+  }
+  setTimeout(() => {
+    autoDownloadBackup();
+  }, 500);
+})();
 </script>
 </body>
 </html>
