@@ -917,6 +917,7 @@ canvas { display: block; }
         <button class="modal-close-btn" style="background:var(--blue-bg);color:var(--blue);margin:0;" onclick="downloadBackup()">백업 다운로드</button>
         <button class="modal-close-btn" style="background:var(--green-bg);color:var(--green);margin:0;" id="upload-backup-btn" onclick="document.getElementById('backup-file-input').click()">백업 복원</button>
         <button class="modal-close-btn" style="background:#ffd60a;color:#333;margin:0;" onclick="requestFileAccess()">💾 저장 폴더 설정</button>
+        <button class="modal-close-btn" style="background:#4285F4;color:white;margin:0;" onclick="connectGoogleDrive()">☁️ Google Drive 연결</button>
         <input type="file" id="backup-file-input" accept=".json" style="display:none;" onchange="handleBackupUpload(event)">
       </div>
       <button class="modal-close-btn" onclick="closeSettingsModal()">닫기</button>
@@ -1069,6 +1070,11 @@ async function save() {
 }
 
 let fileHandle = null;
+let googleDriveFileId = null;
+let googleAuthToken = null;
+
+// Google API 설정 - 본인의 클라이언트 ID를 입력하세요
+const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE';
 
 async function saveToJsonFile() {
   try {
@@ -1085,8 +1091,11 @@ async function saveToJsonFile() {
         console.error('파일 시스템 저장 실패:', e);
         toast('파일 저장 오류: ' + e.message);
       }
-    } else {
-      console.log('파일 핸들이 없음 - 설정 > 저장 폴더 설정을 눌러주세요');
+    }
+
+    // Google Drive에 저장
+    if (googleAuthToken) {
+      await saveToGoogleDrive(jsonData);
     }
 
     // IndexedDB에도 저장
@@ -1146,6 +1155,91 @@ async function requestFileAccess() {
       console.error('파일 접근 오류:', e);
       toast('오류: ' + e.message);
     }
+  }
+}
+
+async function connectGoogleDrive() {
+  const clientId = prompt('Google Cloud 클라이언트 ID를 입력하세요.\n(https://console.cloud.google.com 에서 생성)\n\nOAuth 2.0 클라이언트 ID 예: xxxxx.apps.googleusercontent.com');
+  if (!clientId) return;
+
+  try {
+    await loadGoogleAPI(clientId);
+    toast('Google Drive 인증 중...');
+  } catch(e) {
+    toast('오류: ' + e.message);
+  }
+}
+
+function loadGoogleAPI(clientId) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://apis.google.com/js/api.js';
+    script.onload = () => {
+      gapi.load('client:auth2', async () => {
+        try {
+          await gapi.client.init({
+            clientId: clientId,
+            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+            scope: 'https://www.googleapis.com/auth/drive.file'
+          });
+
+          const authInstance = gapi.auth2.getAuthInstance();
+          if (!authInstance.isSignedIn.get()) {
+            await authInstance.signIn();
+          }
+
+          googleAuthToken = gapi.auth.getToken();
+          toast('✅ Google Drive 연결 완료!');
+          resolve();
+        } catch(e) {
+          reject(e);
+        }
+      });
+    };
+    script.onerror = () => reject(new Error('Google API 로드 실패'));
+    document.head.appendChild(script);
+  });
+}
+
+async function saveToGoogleDrive(jsonData) {
+  if (!googleAuthToken) return;
+
+  try {
+    const metadata = {
+      name: 'app-data.json',
+      mimeType: 'application/json'
+    };
+
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', new Blob([jsonData], { type: 'application/json' }));
+
+    let url = 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    let method = 'POST';
+
+    // 기존 파일이 있으면 업데이트
+    if (googleDriveFileId) {
+      url = `https://www.googleapis.com/upload/drive/v3/files/${googleDriveFileId}?uploadType=multipart`;
+      method = 'PATCH';
+    }
+
+    const response = await fetch(url, {
+      method: method,
+      headers: { 'Authorization': 'Bearer ' + googleAuthToken.access_token },
+      body: form
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      if (!googleDriveFileId) {
+        googleDriveFileId = result.id;
+      }
+      console.log('✓ Google Drive에 저장됨:', result.name);
+    } else {
+      throw new Error('Google Drive 저장 실패: ' + response.statusText);
+    }
+  } catch(e) {
+    console.error('Google Drive 저장 오류:', e);
   }
 }
 
