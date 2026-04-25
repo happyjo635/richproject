@@ -918,6 +918,7 @@ canvas { display: block; }
         <button class="modal-close-btn" style="background:var(--green-bg);color:var(--green);margin:0;" id="upload-backup-btn" onclick="document.getElementById('backup-file-input').click()">백업 복원</button>
         <button class="modal-close-btn" style="background:#ffd60a;color:#333;margin:0;" onclick="requestFileAccess()">💾 저장 폴더 설정</button>
         <button class="modal-close-btn" style="background:#0061FF;color:white;margin:0;" onclick="connectDropbox()">☁️ Dropbox 연결</button>
+        <button class="modal-close-btn" style="background:#0061FF;color:white;margin:0;" onclick="loadFromDropbox()">☁️ Dropbox에서 불러오기</button>
         <input type="file" id="backup-file-input" accept=".json" style="display:none;" onchange="handleBackupUpload(event)">
       </div>
       <button class="modal-close-btn" onclick="closeSettingsModal()">닫기</button>
@@ -1225,6 +1226,53 @@ async function saveToDropbox(jsonData) {
     }
   } catch(e) {
     console.error('Dropbox 저장 네트워크 오류:', e);
+  }
+}
+
+async function loadFromDropbox() {
+  if (!dropboxAccessToken) {
+    toast('⚠️ Dropbox 연결이 필요합니다. 먼저 "Dropbox 연결"을 해주세요.');
+    return;
+  }
+
+  try {
+    toast('Dropbox에서 불러오는 중...');
+    const response = await fetch('https://content.dropboxapi.com/2/files/download', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${dropboxAccessToken}`,
+        'Dropbox-API-Arg': JSON.stringify({
+          path: '/app-data.json'
+        })
+      }
+    });
+
+    if (response.ok) {
+      const jsonText = await response.text();
+      const data = JSON.parse(jsonText);
+
+      if (data.users && data.ledger !== undefined) {
+        S = data;
+        save();
+        renderTab(activeTab);
+        toast('✅ Dropbox에서 불러왔어요!');
+        console.log('✓ Dropbox에서 불러옴: app-data.json');
+        closeSettingsModal();
+      } else {
+        toast('올바른 데이터 형식이 아닙니다');
+      }
+    } else {
+      try {
+        const errorData = await response.json();
+        console.error('Dropbox 불러오기 실패:', errorData);
+        toast('불러오기 실패: ' + (errorData.error_summary || response.statusText));
+      } catch(e) {
+        toast('불러오기 실패: ' + response.statusText);
+      }
+    }
+  } catch(e) {
+    console.error('Dropbox 불러오기 오류:', e);
+    toast('오류: ' + e.message);
   }
 }
 
