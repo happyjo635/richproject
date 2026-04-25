@@ -1162,7 +1162,7 @@ async function connectDropbox() {
 
   try {
     const redirectUri = window.location.origin + window.location.pathname;
-    const authUrl = `https://www.dropbox.com/oauth2/authorize?response_type=code&client_id=${appKey}&redirect_uri=${encodeURIComponent(redirectUri)}&token_access_type=offline`;
+    const authUrl = `https://www.dropbox.com/oauth2/authorize?response_type=token&client_id=${appKey}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
     toast('Dropbox 인증 페이지로 이동합니다...');
     window.open(authUrl, '_blank', 'width=500,height=600');
@@ -1173,17 +1173,25 @@ async function connectDropbox() {
 
 // Dropbox 토큰 처리 (URL에서)
 function checkDropboxAuth() {
+  console.log('=== Dropbox 인증 확인 중 ===');
+  console.log('현재 URL:', window.location.href);
+
   const params = new URLSearchParams(window.location.hash.substring(1));
   const accessToken = params.get('access_token');
+
+  console.log('URL에서 찾은 토큰:', accessToken ? '있음' : '없음');
 
   if (accessToken) {
     dropboxAccessToken = accessToken;
     localStorage.setItem('dropboxToken', accessToken);
     toast('✅ Dropbox 연결 완료!');
-    console.log('Dropbox 토큰 저장됨');
+    console.log('✓ Dropbox 토큰 저장됨:', accessToken.substring(0, 20) + '...');
     window.history.replaceState({}, document.title, window.location.pathname);
   } else if (localStorage.getItem('dropboxToken')) {
     dropboxAccessToken = localStorage.getItem('dropboxToken');
+    console.log('✓ 저장된 Dropbox 토큰 로드됨:', dropboxAccessToken.substring(0, 20) + '...');
+  } else {
+    console.log('⚠️ Dropbox 토큰이 없습니다');
   }
 }
 
@@ -2204,8 +2212,14 @@ setInterval(autoUpdateStockPrices, 300000);
 
 <script>
 /* ── INIT APP ── */
+console.log('앱 초기화 시작...');
 (async () => {
-  checkDropboxAuth();
+  console.log('checkDropboxAuth 함수 실행');
+  try {
+    checkDropboxAuth();
+  } catch(e) {
+    console.error('checkDropboxAuth 에러:', e);
+  }
 
   const backupData = await loadFromIndexedDB();
   if (backupData) {
