@@ -1073,8 +1073,9 @@ async function save() {
 let fileHandle = null;
 let dropboxAccessToken = null;
 
-// Dropbox 설정 - 본인의 앱 키를 입력하세요
-const DROPBOX_APP_KEY = 'YOUR_DROPBOX_APP_KEY_HERE';
+// Dropbox 앱 키 설정
+const DROPBOX_APP_KEY = 'hsy0t5vd8wkgi7b';
+let cachedDropboxAppKey = localStorage.getItem('dropboxAppKey') || DROPBOX_APP_KEY;
 
 async function saveToJsonFile() {
   try {
@@ -1158,8 +1159,16 @@ async function requestFileAccess() {
 }
 
 async function connectDropbox() {
-  const appKey = prompt('Dropbox 앱 키를 입력하세요.\n(https://www.dropbox.com/developers/apps 에서 생성)\n\n앱 키 예: abc123def456');
-  if (!appKey) return;
+  let appKey = cachedDropboxAppKey;
+
+  // 새 앱 키를 입력하고 싶으면 "새 키 입력" 선택
+  const choice = confirm('저장된 앱 키로 연결하시겠어요?\n(취소: 새 키 입력)');
+  if (!choice) {
+    appKey = prompt('Dropbox 앱 키를 입력하세요.\n(https://www.dropbox.com/developers/apps 에서 생성)\n\n앱 키 예: abc123def456');
+    if (!appKey) return;
+    cachedDropboxAppKey = appKey;
+    localStorage.setItem('dropboxAppKey', appKey);
+  }
 
   try {
     const redirectUri = window.location.origin + window.location.pathname;
@@ -1216,6 +1225,11 @@ async function saveToDropbox(jsonData) {
 
     if (response.ok) {
       console.log('✓ Dropbox에 저장됨: app-data.json');
+    } else if (response.status === 401 || response.statusText === 'Unauthorized') {
+      // 토큰 만료 처리
+      dropboxAccessToken = null;
+      localStorage.removeItem('dropboxToken');
+      console.warn('⚠️ Dropbox 토큰이 만료되었습니다. 다시 연결해주세요.');
     } else {
       try {
         const errorData = await response.json();
@@ -1247,6 +1261,15 @@ async function loadFromDropbox() {
       }
     });
 
+    // 토큰 만료 감지
+    if (response.status === 401 || (response.ok === false && response.statusText === 'Unauthorized')) {
+      console.log('토큰이 만료되었습니다. 다시 연결 중...');
+      dropboxAccessToken = null;
+      localStorage.removeItem('dropboxToken');
+      toast('토큰이 만료되었습니다. Dropbox를 다시 연결하세요.');
+      return;
+    }
+
     if (response.ok) {
       const jsonText = await response.text();
       const data = JSON.parse(jsonText);
@@ -1265,6 +1288,15 @@ async function loadFromDropbox() {
       try {
         const errorData = await response.json();
         console.error('Dropbox 불러오기 실패:', errorData);
+
+        // expired_access_token 에러 처리
+        if (errorData.error?.'.tag' === 'auth' || errorData.error_summary?.includes('expired_access_token')) {
+          dropboxAccessToken = null;
+          localStorage.removeItem('dropboxToken');
+          toast('⚠️ 토큰이 만료되었습니다. "Dropbox 연결"을 눌러 다시 연결해주세요.');
+          return;
+        }
+
         toast('불러오기 실패: ' + (errorData.error_summary || response.statusText));
       } catch(e) {
         toast('불러오기 실패: ' + response.statusText);
