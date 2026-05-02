@@ -1290,7 +1290,7 @@ async function loadFromDropbox() {
         console.error('Dropbox 불러오기 실패:', errorData);
 
         // expired_access_token 에러 처리
-        if (errorData.error?.'.tag' === 'auth' || errorData.error_summary?.includes('expired_access_token')) {
+        if (errorData.error?.['.tag'] === 'auth' || errorData.error_summary?.includes('expired_access_token')) {
           dropboxAccessToken = null;
           localStorage.removeItem('dropboxToken');
           toast('⚠️ 토큰이 만료되었습니다. "Dropbox 연결"을 눌러 다시 연결해주세요.');
