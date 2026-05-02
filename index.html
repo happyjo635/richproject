@@ -1010,7 +1010,7 @@ const DEFAULT_STATE = {
   exchangeRate: 1370,
 };
 
-let S = loadState();
+let S; // 나중에 초기화
 let currentUserId = null;
 let activeTab = 'ledger';
 // 한국시(KST, UTC+9) 기준 현재 날짜를 YYYY-MM-DD 형식으로 반환
@@ -2289,6 +2289,7 @@ function initTheme() {
 }
 
 /* ── INIT ── */
+S = loadState(); // 상태 초기화
 initTheme();
 renderUserSelect();
 setInterval(autoUpdateStockPrices, 300000);
